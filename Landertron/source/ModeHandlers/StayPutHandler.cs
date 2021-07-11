@@ -1,4 +1,4 @@
-﻿/* Copyright 2015 charfa.
+﻿/* Copyright 2015-2017 charfa, Kerbas_ad_astra.
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,8 +37,8 @@ namespace Landertron
         {
             Vector3d thrustDirection = calculateCombinedThrust(firingLandertrons).normalized;
             Vector3d down = (vessel.mainBody.position - vessel.CoM).normalized;
-            RaycastHit surface;
-            Physics.Raycast(vessel.CoM, down, out surface, float.PositiveInfinity, 1 << 15);
+            //RaycastHit surface;
+            Physics.Raycast(vessel.CoM, down, out RaycastHit surface, float.PositiveInfinity, 1 << 15);
             return Vector3d.Dot(thrustDirection, surface.normal) >= 0;
         }
     }

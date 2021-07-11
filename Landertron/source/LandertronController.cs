@@ -1,4 +1,4 @@
-﻿/* Copyright 2015 charfa.
+﻿/* Copyright 2015-2017 charfa, Kerbas_ad_astra.
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,12 +23,12 @@ namespace Landertron
 {
     public class LandertronController : VesselModule
     {
-        Vessel vessel;
+        //Vessel vessel;
         Logger log;
 
-        public void Start()
+        public new void Start()
         {
-            vessel = GetComponent<Vessel>();
+            //vessel = GetComponent<Vessel>();
             log = new Logger("[LandertronController:" + vessel.id + "] ");
         }
 

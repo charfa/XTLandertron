@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("Landertron")]
-[assembly: AssemblyCopyright("Copyright © charfa 2015")]
+[assembly: AssemblyCopyright("Copyright © Kerbas-ad-astra 2018")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -29,8 +29,8 @@ using System.Runtime.InteropServices;
 //      Build Number
 //      Revision
 //
-[assembly: AssemblyVersion("0.11.0")]
-[assembly: AssemblyFileVersion("0.11.0.0")]
-[assembly: AssemblyInformationalVersion("0.11.0")]
+[assembly: AssemblyVersion("1.1.1")]
+[assembly: AssemblyFileVersion("1.1.1.0")]
+[assembly: AssemblyInformationalVersion("1.1.1")]
 
-[assembly: KSPAssembly("Landertron", 0, 11)]
+[assembly: KSPAssembly("Landertron", 1, 0)]

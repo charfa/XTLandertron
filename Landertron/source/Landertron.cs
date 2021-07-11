@@ -1,5 +1,5 @@
 ﻿/* Copyright 2015 XanderTek (contributions by TheDog & Kerbas_ad_astra).
- * Copyright 2015 charfa
+ * Copyright 2015-2017 charfa, Kerbas_ad_astra.
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using KSP.Localization;
 
 namespace Landertron
 {
@@ -44,7 +45,7 @@ namespace Landertron
         public bool refuelable = true;
 
         [KSPField]
-        public float electricRate = 0.05f;
+        public double electricRate = 0.05d;
 
         [KSPField(isPersistant = false, guiActive = true, guiName = "Status")]
         public string displayStatus = "Idle";
@@ -60,7 +61,7 @@ namespace Landertron
             {
                 return _mode;
             }
-            private set
+            protected set
             {
                 if (_mode != value)
                     setMode(value);
@@ -68,14 +69,15 @@ namespace Landertron
         }
 
         // KSPField doesn't like enums or properties so this will be persisted in OnLoad/OnSave.
-        Status _status = Status.Idle;
-        public Status status
+        //Status _status = Status.Idle;
+        public Status _status = Status.Idle;
+        virtual public Status status
         {
             get
             {
                 return _status;
             }
-            private set
+            protected set
             {
                 if (_status != value)
                     setStatus(value);
@@ -98,13 +100,15 @@ namespace Landertron
             }
         }
 
-        public Vector3d engineThrust
+        virtual public Vector3d engineThrust
         {
             get
             {
                 Vector3d vector = Vector3d.zero;
-                foreach (var transform in engine.thrustTransforms)
-                    vector -= transform.forward;
+                for (int i = 0; i < engine.thrustTransforms.Count; i++)
+                {
+                    vector -= engine.thrustTransforms[i].forward * engine.thrustTransformMultipliers[i];
+                }
                 vector.Normalize();
                 double isp = engine.atmosphereCurve.Evaluate((float)engine.part.staticPressureAtm);
                 double fuelFlow = Mathf.Lerp(engine.minFuelFlow, engine.maxFuelFlow, engine.thrustPercentage / 100);
@@ -113,7 +117,7 @@ namespace Landertron
             }
         }
 
-        public double engineBurnTime
+        virtual public double engineBurnTime
         {
             get
             {
@@ -122,6 +126,14 @@ namespace Landertron
                 return fuelMass / fuelFlow;
             }
         }
+
+        //virtual public double engineFuelFlow
+        //{
+        //    get
+        //    {
+        //        return Mathf.Lerp(engine.minFuelFlow, engine.maxFuelFlow, engine.thrustPercentage / 100);
+        //    }
+        //}
 
         ModuleEngines engine;
         PartResource propellantResource;
@@ -151,7 +163,7 @@ namespace Landertron
         public void arm()
         {
             if (status != Status.Idle)
-                throw new InvalidOperationException("Can only be armed when Idle, was " + status.ToString());
+                throw new InvalidOperationException(Localizer.Format("#autoLOC_XTL_invalid_arm", statusString(status)));
             status = Status.Armed;
             part.force_activate();
         }
@@ -165,7 +177,7 @@ namespace Landertron
         public void disarm()
         {
             if (status != Status.Armed)
-                throw new InvalidOperationException("Can only be disarmed when Armed, was " + status.ToString());
+                throw new InvalidOperationException(Localizer.Format("#autoLOC_XTL_invalid_disarm", statusString(status)));
             status = Status.Idle;
         }
         [KSPAction("Disarm")]
@@ -201,7 +213,7 @@ namespace Landertron
 
         public override void OnSave(ConfigNode node)
         {
-            node.SetValue("mode", mode.ToString(), true);
+            node.SetValue("mode", mode.ToString(), true);  // Do not localize these!  This is for internal state saving, not external display.
             node.SetValue("status", status.ToString(), true);
         }
 
@@ -226,6 +238,14 @@ namespace Landertron
                 part.attachRules.allowSrfAttach = true;
 
             animStates = setUpAnimation(animationName, part);
+
+            // Localize event and action names
+            Events["arm"].guiName = Localizer.Format("#autoLOC_XTL_arm_guiname");
+            Events["disarm"].guiName = Localizer.Format("#autoLOC_XTL_disarm_guiname");
+			Events["nextMode"].guiName = Localizer.Format("#autoLOC_XTL_setMode_guiname", modeString(_mode));
+            Actions["armAction"].guiName = Localizer.Format("#autoLOC_XTL_arm_guiname");
+            Actions["disarmAction"].guiName = Localizer.Format("#autoLOC_XTL_disarm_guiname");
+            Fields["displayStatus"].guiName = Localizer.Format("#autoLOC_XTL_displayStatus_guiname");
         }
 
         public override void OnActive()
@@ -256,23 +276,23 @@ namespace Landertron
             }
             if (status == Status.Armed)
             {
-                float electricReq = electricRate * TimeWarp.fixedDeltaTime;
-                if (part.RequestResource("ElectricCharge", electricReq) < electricReq)
+                double electricReq = electricRate * TimeWarp.fixedDeltaTime;
+                if (part.RequestResource("ElectricCharge", electricReq) < (0.99 * electricReq))
                 {
                     disarm();
-                    ScreenMessages.PostScreenMessage("Landertron ouf of electric charge, disarming!", 5, ScreenMessageStyle.UPPER_CENTER);
+                    ScreenMessages.PostScreenMessage("Landertron out of electric charge, disarming!", 5, ScreenMessageStyle.UPPER_CENTER);
                 }
             }
         }
 
-        internal void fire()
+        virtual internal void fire()
         {
             log.debug("Firing engine");
             engine.Activate();
             status = Status.Firing;
         }
 
-        internal void shutdown()
+        virtual internal void shutdown()
         {
             if (engine.allowShutdown)
             {
@@ -287,27 +307,27 @@ namespace Landertron
             }
         }
 
-        private void ventFuel()
+        protected void ventFuel()
         {
             log.debug("Venting fuel: " + propellantResource.amount);
             propellantResource.amount = 0;
             status = Status.Empty;
         }
 
-        private void setMode(Mode value)
+        protected void setMode(Mode value)
         {
             _mode = value;
-            Events["nextMode"].guiName = "Mode: " + mode.ToString();
+            Events["nextMode"].guiName = Localizer.Format("#autoLOC_XTL_setMode_guiname", modeString(mode));
         }
 
-        private void setStatus(Status value)
+        protected void setStatus(Status value)
         {
             _status = value;
             log.info("Status set to " + _status.ToString());
             switch (_status)
             {
                 case Status.Idle:
-                    displayStatus = "Idle";
+                    displayStatus = Localizer.Format("#autoLOC_XTL_Status_Idle");
                     part.stackIcon.SetIconColor(XKCDColors.White);
                     animDeployed = false;
                     Events["arm"].active = true;
@@ -316,7 +336,7 @@ namespace Landertron
                     Actions["disarmAction"].active = false;
                     break;
                 case Status.Armed:
-                    displayStatus = "Armed";
+                    displayStatus = Localizer.Format("#autoLOC_XTL_Status_Armed");
                     part.stackIcon.SetIconColor(XKCDColors.LightCyan);
                     animDeployed = true;
                     Events["arm"].active = false;
@@ -325,7 +345,7 @@ namespace Landertron
                     Actions["disarmAction"].active = true;
                     break;
                 case Status.Firing:
-                    displayStatus = "Firing!";
+                    displayStatus = Localizer.Format("#autoLOC_XTL_Status_Firing");
                     part.stackIcon.SetIconColor(XKCDColors.RadioactiveGreen);
                     animDeployed = true;
                     Events["arm"].active = false;
@@ -334,7 +354,7 @@ namespace Landertron
                     Actions["disarmAction"].active = false;
                     break;
                 case Status.Empty:
-                    displayStatus = "Empty";
+                    displayStatus = Localizer.Format("#autoLOC_XTL_Status_Empty");
                     part.stackIcon.SetIconColor(XKCDColors.DarkGrey);
                     animDeployed = true;
                     Events["arm"].active = false;
@@ -345,10 +365,10 @@ namespace Landertron
             }
         }
 
-        private void refuel()
+        protected void refuel()
         {
             bool justrefueled = false;
-            for (int i = 0; i < part.children.Count; )
+            for (int i = 0; i < part.children.Count;)
             {
                 Part p = part.children[i];
                 if (p.Resources.Contains(propellantResource.info.id) && propellantResource.amount < propellantResource.maxAmount)
@@ -371,7 +391,7 @@ namespace Landertron
             }
         }
 
-        private void forAllSym()
+        protected void forAllSym()
         {
             foreach (Part p in part.symmetryCounterparts)
             {
@@ -380,7 +400,7 @@ namespace Landertron
             }
         }
 
-        private static AnimationState[] setUpAnimation(string animationName, Part part)  //Thanks Majiir!
+        protected static AnimationState[] setUpAnimation(string animationName, Part part)  //Thanks Majiir!
         {
             var states = new List<AnimationState>();
             foreach (var animation in part.FindModelAnimators(animationName))
@@ -395,7 +415,7 @@ namespace Landertron
             return states.ToArray();
         }
 
-        private void updateAnimation()
+        protected void updateAnimation()
         {
             foreach (AnimationState anim in animStates)
             {
@@ -423,6 +443,38 @@ namespace Landertron
                         anim.normalizedTime = 0;
                     }
                 }
+            }
+        }
+
+        protected String statusString(Status stat)
+        {
+            switch (stat)
+            {
+                case Status.Idle:
+                    return Localizer.Format("#autoLOC_XTL_Status_Idle");
+                case Status.Armed:
+                    return Localizer.Format("#autoLOC_XTL_Status_Armed");
+                case Status.Firing:
+                    return Localizer.Format("#autoLOC_XTL_Status_Firing");
+                case Status.Empty:
+                    return Localizer.Format("#autoLOC_XTL_Status_Empty");
+                default:
+                    return "";
+            }
+        }
+
+        protected String modeString(Mode mode)
+        {
+            switch (mode)
+            {
+                case Mode.StayPut:
+                    return Localizer.Format("#autoLOC_XTL_Mode_StayPut");
+                case Mode.SoftLanding:
+                    return Localizer.Format("#autoLOC_XTL_Mode_SoftLanding");
+                case Mode.ShortLanding:
+                    return Localizer.Format("#autoLOC_XTL_Mode_ShortLanding");
+                default:
+                    return "";
             }
         }
     }

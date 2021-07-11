@@ -1,4 +1,4 @@
-﻿/* Copyright 2015 charfa.
+﻿/* Copyright 2015-2017 charfa, Kerbas_ad_astra.
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,25 +35,38 @@ namespace Landertron
 
             Vector3d combinedThrust = calculateCombinedThrust(armedLandertrons);
             Vector3d thrustDirection = combinedThrust.normalized;
+			Vector3d down = (vessel.mainBody.position - vessel.CoM).normalized;
 
-            double projectedSpeed = Vector3d.Dot(vessel.srf_velocity, thrustDirection);
+			double projectedSpeed = Vector3d.Dot(vessel.srf_velocity, thrustDirection);
             if (projectedSpeed >= 0) // already stopped
                 return false;
 
             double distanceToGround = calculateDistanceToGround(vessel, -thrustDirection);
+			double distanceToGroundVert = calculateDistanceToGround(vessel, down);
             // Landertrons will start slowing the vessel down only on the next FixedUpdate,
             // so we check how far off the ground it will be then.
             distanceToGround += projectedSpeed * TimeWarp.fixedDeltaTime;
             // Actually, let's look two frames ahead, if it will be too late (vessel stops under ground)
             // we trigger Landertrons to start slowing us down one frame ahead.
             double nextFrameDistanceToGround = distanceToGround + projectedSpeed * TimeWarp.fixedDeltaTime;
-            log.debug("Distance to ground: " + distanceToGround + ", next frame: " + nextFrameDistanceToGround);
+			log.debug("Distance to ground: " + distanceToGround + ", next frame: " + nextFrameDistanceToGround + ", vertically: " + distanceToGroundVert);
             if (distanceToGround <= 0) // already on the ground
                 return false;
-
-            double finalAcc = Vector3d.Dot(vessel.acceleration, thrustDirection) + combinedThrust.magnitude / vessel.GetTotalMass();
-            double timeToStop = -projectedSpeed / finalAcc;
+            
+            double gravity = FlightGlobals.currentMainBody.gravParameter / Math.Pow(FlightGlobals.currentMainBody.Radius, 2.0);
+			double finalAcc = Vector3d.Dot(down, thrustDirection) * gravity + combinedThrust.magnitude / vessel.GetTotalMass();
+			//double currentAcc = FlightGlobals.ship_geeForce * 9.80665;
+			//if (FlightGlobals.currentMainBody.atmosphere && ((currentAcc / gravity) < 1.1))  // A body in free-fall experiences 0 geeForce, a body exactly at terminal velocity experiences 1 G (or whatever the local acceleration of gravity is).  If currentAcc is >1.1G, assume it's not at terminal velocity and use the more conservative calculation of assuming no atmosphere.
+			//{
+			//	gravity = Math.Min(gravity, Math.Abs(gravity - currentAcc));  //In case there's anything weird going on, let's prevent gravity from becoming negative
+			//}
+			double predictedSpeed = Math.Sqrt(Math.Pow(projectedSpeed, 2.0) + 2 * distanceToGroundVert * gravity);
+			log.debug("Projspeed: " + projectedSpeed + " predspeed: " + predictedSpeed);
+			double timeToStop = predictedSpeed / finalAcc;
             double burnTime = getMinBurnTime(armedLandertrons);
+
+			log.debug("Final acc: " + finalAcc + " time to stop: " + timeToStop + " burn time: " + burnTime);
+
             if (timeToStop < 0 || timeToStop > burnTime) // will never stop
                 timeToStop = burnTime;
 
@@ -87,12 +100,29 @@ namespace Landertron
             return minBurnTime;
         }
 
-        private double calculateDistanceToGround(Vessel vessel, Vector3d direction)
+        public double calculateDistanceToGround(Vessel vessel, Vector3d direction)
         {
-            Vector3d position = vessel.findWorldCenterOfMass();
+			Vector3d position = vessel.CoM;
             RaycastHit hit;
             if (!Physics.Raycast(position, direction, out hit, float.PositiveInfinity, 1 << 15))
                 return double.PositiveInfinity;
+
+            double distanceToTerrain = hit.distance;
+
+            double distanceToWater = double.PositiveInfinity;
+
+            if (vessel.mainBody.ocean) {  // Do a little trig to see if/where our current trajectory will intersect the sea-level sphere (which the raycast doesn't detect).
+                Vector3d down = (vessel.mainBody.position - vessel.CoM).normalized;
+                double cosTheta = Vector3d.Dot (down, direction);
+                double r = vessel.mainBody.Radius;
+                double a = r + vessel.altitude;
+                double discriminant = Math.Pow (a, 2) * Math.Pow (cosTheta, 2) - (Math.Pow (a, 2) - Math.Pow (r, 2)); //It's divided by a factor of four from the usual discriminant, because the discriminant will just get sqrted and divided by 2 anyway.
+                if (discriminant >= 0) {
+                    distanceToWater = a * cosTheta - Math.Sqrt (discriminant);
+                }
+            }
+
+            double distanceToImpact = Math.Min (distanceToTerrain, distanceToWater);
 
             Vector3d fakeInfinity = position + 1000 * direction;
             double maxExtent = 0;
@@ -105,7 +135,7 @@ namespace Landertron
                 }
             }
 
-            return hit.distance - maxExtent;
+            return distanceToImpact - maxExtent;
         }
     }
 }
